@@ -1553,10 +1553,11 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
       onSave(out)
     }
   }
-  return <>
-    <h3 className={exerciseNameClass(ex)}>{exerciseNameFor(ex)}</h3>
-    <Media ex={ex} />
-    {/* The same tags the exercise detail sheet shows, secondaries included: choosing what goes
+  return (
+    <>
+      <h3 className={exerciseNameClass(ex)}>{exerciseNameFor(ex)}</h3>
+      <Media ex={ex} />
+      {/* The same tags the exercise detail sheet shows, secondaries included: choosing what goes
         into a plan is exactly when "what else does this hit" matters, and until now that was
         only visible from the Exercises tab, after the fact. Custom exercises and the newer
         metadata name muscles by the map's ids ("forearm", "gluteal"), which only MUSCLE_NAME
@@ -1615,6 +1616,7 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
               rest[i] = v
               return { ...x, pyramidRest: rest }
             })} />
+          {!bw && <Stepper label={t('Weight ({0})', st.unit)} value={c.weight} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
         </div>
         <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
           <Button size="sm" variant={p === PYRAMID_MAX ? 'primary' : 'plain'} aria-pressed={p === PYRAMID_MAX}
@@ -1784,8 +1786,10 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
         changed on this sheet and not saved is left behind, as closing it would. */}
     {onReplace && <><div style={{ height: 8 }} /><Button icon="swap" onClick={() => { close(); onReplace() }}>{t('Replace exercise')}</Button></>}
     {onDelete && <><div style={{ height: 8 }} /><Button variant="danger" onClick={() => { close(); onDelete() }}>{t('Remove from routine')}</Button></>}
-  </>
+    </>
+  )
 }
+
 export const exConfigSheet = (ex, existing, onSave, onDelete, routine, initial, onReplace, saveLabel) => ui().openSheet(close => <ExConfig ex={ex} existing={existing} initial={initial} onSave={onSave} onDelete={onDelete} onReplace={onReplace} routine={routine} saveLabel={saveLabel} close={close} />)
 
 /* ============================ glyph picker ============================ */
