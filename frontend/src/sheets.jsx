@@ -1541,7 +1541,17 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
       // The list is the prescription; sets and reps follow it, so everything that reads the
       // flat target (a config sheet reopened with the toggle off, older builds) still makes sense.
       const list = pyramid ? normalizePyramid(c.pyramid, stride) : []
-      if (list.length) Object.assign(out, flatFromPyramid(list), { pyramid: list })
+      if (list.length) {
+        const pyramidWeights = list.length
+          ? list.map((_, i) =>
+              Math.max(0, Number((c.pyramidWeights || [])[i] ?? c.weight ?? 0)),
+            )
+          : [];
+        Object.assign(out, flatFromPyramid(list), {
+          pyramid: list,
+          pyramidWeights,
+        });
+      }
       const pyramidRest = list.length ? normalizePyramidRest(c.pyramidRest, list.length) : []
       if (pyramidRest.length) out.pyramidRest = pyramidRest
       if (double) out.repsMin = range.repsMin
@@ -1553,239 +1563,745 @@ function ExConfig({ ex, existing, onSave, onDelete, onReplace, close, routine, i
       onSave(out)
     }
   }
-  return <>
-    <h3 className={exerciseNameClass(ex)}>{exerciseNameFor(ex)}</h3>
-    <Media ex={ex} />
-    {/* The same tags the exercise detail sheet shows, secondaries included: choosing what goes
+  return (
+    <>
+      <h3 className={exerciseNameClass(ex)}>{exerciseNameFor(ex)}</h3>
+      <Media ex={ex} />
+      {/* The same tags the exercise detail sheet shows, secondaries included: choosing what goes
         into a plan is exactly when "what else does this hit" matters, and until now that was
         only visible from the Exercises tab, after the fact. Custom exercises and the newer
         metadata name muscles by the map's ids ("forearm", "gluteal"), which only MUSCLE_NAME
         turns into a translatable label. */}
-    <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '10px 0 14px' }}>
-      {cardio && <span className="tag acc"><Icon name="figureRun" />{t('Cardio')}</span>}
-      <span className="tag">{t(MUSCLE_NAME[ex.tg] || ex.tg || ex.bp)}</span><span className="tag">{t(ex.eq)}</span>
-      {!cardio && (ex.secondaries?.length ? ex.secondaries : smOf(ex)).filter(trainedBy(ex)).slice(0, 3)
-        .map((s, i) => <span key={i} className="tag dim">{t(MUSCLE_NAME[s] || s)}</span>)}
-    </div>
-    {ex.desc && <div className="exnote">{ex.desc}</div>}
-    {!cardio && <div style={{ marginBottom: 14 }}>
-      <Segmented className="seg-range" value={mode} onChange={setMode}
-        options={[{ value: 'reps', label: t('Reps') }, { value: 'time', label: t('Time') }]} />
-    </div>}
-    <div className="row cfgrow" style={{ marginBottom: mode === 'time' ? 8 : 18 }}>
-      {cardio ? <>
-        <Stepper label={t('Intervals')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />
-        <Stepper label={t('Minutes')} value={c.min} step={1} decimal={false} onChange={v => setC(x => ({ ...x, min: v }))} />
-        {/* Typed and stepped in the profile's unit, kept in km/h (lib/speed.js). */}
-        <Stepper label={speedUnit === 'mph' ? t('Speed (mph)') : t('Speed (km/h)')} value={toSpeed(c.speed, speedUnit)} step={0.5}
-          onChange={v => setC(x => ({ ...x, speed: fromSpeed(v, speedUnit) }))} />
-      </> : mode === 'time' ? <>
-        <Stepper label={t('Sets')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />
-        <Stepper label={t('Seconds')} value={c.sec} step={5} decimal={false} onChange={v => setC(x => ({ ...x, sec: v }))} />
-        {/* A bodyweight hold's load is the "Added" row below — showing both put two fields on
-            one value. */}
-        {!bw && <Stepper label={t('Weight ({0})', st.unit)} value={c.weight} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
-      </> : <>
-        {/* Rest-pause always trains as exactly two rows — a warm-up at this rep count, then one
-            rest-pause work set — so "Sets" has nothing left to mean and only invites a mismatch. */}
-        {c.intensifier?.type !== 'restpause' && !pyramid &&
-          <Stepper label={t('Sets')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />}
-        {!double && !pyramid && <Stepper label={t('Reps')} value={c.reps} step={perSide ? 2 : 1} decimal={false} onChange={v => setC(x => ({ ...x, reps: v }))} />}
-        {/* On bodyweight work the weight stepper is the click #32 is about, so it is not here
-            until there is a belt to describe — see the added-weight row below. */}
-        {!bw && !pyramid && <Stepper label={t('Weight ({0})', st.unit)} value={c.weight} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
-      </>}
-    </div>
-    {/* Pyramid sets: a row per set, each with its own reps or Max. No weight — that is picked
-        set by set while training, seeded from the same set last time (buildSets). */}
-    {pyramid && <div style={{ marginTop: -10, marginBottom: 18 }}>
-      {/* Presets replace the list (and its rests) in one tap; the sheet is not saved until Save. */}
-      <div className="chips" style={{ marginBottom: 10 }}>
-        {PYRAMID_PRESETS.map((preset, k) => <button key={k} type="button" className="chip"
-          onClick={() => setC(x => ({ ...x, pyramid: [...preset], pyramidRest: undefined }))}>{pyramidLabel(preset)}</button>)}
+      <div
+        className="row"
+        style={{ gap: 6, flexWrap: "wrap", margin: "10px 0 14px" }}
+      >
+        {cardio && (
+          <span className="tag acc">
+            <Icon name="figureRun" />
+            {t("Cardio")}
+          </span>
+        )}
+        <span className="tag">{t(MUSCLE_NAME[ex.tg] || ex.tg || ex.bp)}</span>
+        <span className="tag">{t(ex.eq)}</span>
+        {!cardio &&
+          (ex.secondaries?.length ? ex.secondaries : smOf(ex))
+            .filter(trainedBy(ex))
+            .slice(0, 3)
+            .map((s, i) => (
+              <span key={i} className="tag dim">
+                {t(MUSCLE_NAME[s] || s)}
+              </span>
+            ))}
       </div>
-      {c.pyramid.map((p, i) => <div key={i} style={{ marginBottom: 10 }}>
-        <div className="row cfgrow" style={{ marginBottom: 4 }}>
-          {p === PYRAMID_MAX
-            ? <div className="small"><strong>{t('Set {0}', i + 1)}</strong> · {t('Max: as many reps as you can')}</div>
-            : <Stepper label={t('Set {0}', i + 1)} value={p} step={perSide ? 2 : 1} min={1} decimal={false} onChange={v => setPyramidAt(i, v)} />}
-          <Stepper label={t('Rest (s)')} value={(c.pyramidRest || [])[i] || 0} step={15} decimal={false}
-            onChange={v => setC(x => {
-              const rest = Array.from({ length: x.pyramid.length }, (_, j) => (x.pyramidRest || [])[j] || 0)
-              rest[i] = v
-              return { ...x, pyramidRest: rest }
-            })} />
+      {ex.desc && <div className="exnote">{ex.desc}</div>}
+      {!cardio && (
+        <div style={{ marginBottom: 14 }}>
+          <Segmented
+            className="seg-range"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "reps", label: t("Reps") },
+              { value: "time", label: t("Time") },
+            ]}
+          />
         </div>
-        <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-          <Button size="sm" variant={p === PYRAMID_MAX ? 'primary' : 'plain'} aria-pressed={p === PYRAMID_MAX}
-            onClick={() => setPyramidAt(i, p === PYRAMID_MAX ? (c.reps || 10) : PYRAMID_MAX)}>{t('Max')}</Button>
-          {c.pyramid.length > 1 && <Button size="sm" icon="trash" aria-label={t('Remove set')} title={t('Remove set')}
-            onClick={() => setC(x => ({ ...x, pyramid: x.pyramid.filter((_, j) => j !== i), pyramidRest: x.pyramidRest?.filter((_, j) => j !== i) }))} />}
+      )}
+      <div
+        className="row cfgrow"
+        style={{ marginBottom: mode === "time" ? 8 : 18 }}
+      >
+        {cardio ? (
+          <>
+            <Stepper
+              label={t("Intervals")}
+              value={c.sets}
+              step={1}
+              decimal={false}
+              onChange={(v) => setC((x) => ({ ...x, sets: v }))}
+            />
+            <Stepper
+              label={t("Minutes")}
+              value={c.min}
+              step={1}
+              decimal={false}
+              onChange={(v) => setC((x) => ({ ...x, min: v }))}
+            />
+            {/* Typed and stepped in the profile's unit, kept in km/h (lib/speed.js). */}
+            <Stepper
+              label={speedUnit === "mph" ? t("Speed (mph)") : t("Speed (km/h)")}
+              value={toSpeed(c.speed, speedUnit)}
+              step={0.5}
+              onChange={(v) =>
+                setC((x) => ({ ...x, speed: fromSpeed(v, speedUnit) }))
+              }
+            />
+          </>
+        ) : mode === "time" ? (
+          <>
+            <Stepper
+              label={t("Sets")}
+              value={c.sets}
+              step={1}
+              decimal={false}
+              onChange={(v) => setC((x) => ({ ...x, sets: v }))}
+            />
+            <Stepper
+              label={t("Seconds")}
+              value={c.sec}
+              step={5}
+              decimal={false}
+              onChange={(v) => setC((x) => ({ ...x, sec: v }))}
+            />
+            {/* A bodyweight hold's load is the "Added" row below — showing both put two fields on
+            one value. */}
+            {!bw && (
+              <Stepper
+                label={t("Weight ({0})", st.unit)}
+                value={c.weight}
+                step={2.5}
+                onChange={(v) => setC((x) => ({ ...x, weight: v }))}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {/* Rest-pause always trains as exactly two rows — a warm-up at this rep count, then one
+            rest-pause work set — so "Sets" has nothing left to mean and only invites a mismatch. */}
+            {c.intensifier?.type !== "restpause" && !pyramid && (
+              <Stepper
+                label={t("Sets")}
+                value={c.sets}
+                step={1}
+                decimal={false}
+                onChange={(v) => setC((x) => ({ ...x, sets: v }))}
+              />
+            )}
+            {!double && !pyramid && (
+              <Stepper
+                label={t("Reps")}
+                value={c.reps}
+                step={perSide ? 2 : 1}
+                decimal={false}
+                onChange={(v) => setC((x) => ({ ...x, reps: v }))}
+              />
+            )}
+            {/* On bodyweight work the weight stepper is the click #32 is about, so it is not here
+            until there is a belt to describe — see the added-weight row below. */}
+            {!bw && !pyramid && (
+              <Stepper
+                label={t("Weight ({0})", st.unit)}
+                value={c.weight}
+                step={2.5}
+                onChange={(v) => setC((x) => ({ ...x, weight: v }))}
+              />
+            )}
+          </>
+        )}
+      </div>
+      {/* Pyramid sets: a row per set, each with its own reps or Max. No weight — that is picked
+        set by set while training, seeded from the same set last time (buildSets). */}
+      {pyramid && (
+        <div style={{ marginTop: -10, marginBottom: 18 }}>
+          {/* Presets replace the list (and its rests) in one tap; the sheet is not saved until Save. */}
+          <div className="chips" style={{ marginBottom: 10 }}>
+            {PYRAMID_PRESETS.map((preset, k) => (
+              <button
+                key={k}
+                type="button"
+                className="chip"
+                onClick={() =>
+                  setC((x) => ({
+                    ...x,
+                    pyramid: [...preset],
+                    pyramidRest: undefined,
+                  }))
+                }
+              >
+                {pyramidLabel(preset)}
+              </button>
+            ))}
+          </div>
+          {c.pyramid.map((p, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div className="row cfgrow" style={{ marginBottom: 4 }}>
+                {p === PYRAMID_MAX ? (
+                  <div className="small">
+                    <strong>{t("Set {0}", i + 1)}</strong> ·{" "}
+                    {t("Max: as many reps as you can")}
+                  </div>
+                ) : (
+                  <Stepper
+                    label={t("Set {0}", i + 1)}
+                    value={p}
+                    step={perSide ? 2 : 1}
+                    min={1}
+                    decimal={false}
+                    onChange={(v) => setPyramidAt(i, v)}
+                  />
+                )}
+                <Stepper
+                  label={t("Rest (s)")}
+                  value={(c.pyramidRest || [])[i] || 0}
+                  step={15}
+                  decimal={false}
+                  onChange={(v) =>
+                    setC((x) => {
+                      const rest = Array.from(
+                        { length: x.pyramid.length },
+                        (_, j) => (x.pyramidRest || [])[j] || 0,
+                      );
+                      rest[i] = v;
+                      return { ...x, pyramidRest: rest };
+                    })
+                  }
+                />
+                {!bw && (
+                  <Stepper
+                    label={t("Weight ({0})", st.unit)}
+                    value={(c.pyramidWeights || [])[i] ?? c.weight ?? 0}
+                    step={2.5}
+                    onChange={(v) =>
+                      setC((x) => {
+                        const weights = Array.from(
+                          { length: x.pyramid.length },
+                          (_, j) =>
+                            (x.pyramidWeights || [])[j] ?? x.weight ?? 0,
+                        );
+                        weights[i] = v;
+
+                        return {
+                          ...x,
+                          pyramidWeights: weights,
+                        };
+                      })
+                    }
+                  />
+                )}
+              </div>
+              <div
+                className="row"
+                style={{ justifyContent: "flex-end", gap: 8 }}
+              >
+                <Button
+                  size="sm"
+                  variant={p === PYRAMID_MAX ? "primary" : "plain"}
+                  aria-pressed={p === PYRAMID_MAX}
+                  onClick={() =>
+                    setPyramidAt(
+                      i,
+                      p === PYRAMID_MAX ? c.reps || 10 : PYRAMID_MAX,
+                    )
+                  }
+                >
+                  {t("Max")}
+                </Button>
+                {c.pyramid.length > 1 && (
+                  <Button
+                    size="sm"
+                    icon="trash"
+                    aria-label={t("Remove set")}
+                    title={t("Remove set")}
+                    onClick={() =>
+                      setC((x) => ({
+                        ...x,
+                        pyramid: x.pyramid.filter((_, j) => j !== i),
+                        pyramidRest: x.pyramidRest?.filter((_, j) => j !== i),
+                      }))
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            icon="plus"
+            disabled={c.pyramid.length >= MAX_PYRAMID_SETS}
+            onClick={() =>
+              setC((x) => ({
+                ...x,
+                pyramid: [...x.pyramid, x.pyramid[x.pyramid.length - 1]],
+                // The new set copies the last one's rest too, like its target.
+                pyramidRest: x.pyramidRest?.length
+                  ? [
+                      ...x.pyramid.map((_, j) => x.pyramidRest[j] || 0),
+                      x.pyramidRest[x.pyramid.length - 1] || 0,
+                    ]
+                  : x.pyramidRest,
+              }))
+            }
+          >
+            {t("Add set")}
+          </Button>
+          <div className="small dim" style={{ marginTop: 8 }}>
+            {t("A set left at 0 rest uses the exercise’s rest.")}
+          </div>
         </div>
-      </div>)}
-      <Button size="sm" icon="plus" disabled={c.pyramid.length >= MAX_PYRAMID_SETS}
-        onClick={() => setC(x => ({
-          ...x,
-          pyramid: [...x.pyramid, x.pyramid[x.pyramid.length - 1]],
-          // The new set copies the last one's rest too, like its target.
-          pyramidRest: x.pyramidRest?.length ? [...x.pyramid.map((_, j) => x.pyramidRest[j] || 0), x.pyramidRest[x.pyramid.length - 1] || 0] : x.pyramidRest,
-        }))}>{t('Add set')}</Button>
-      <div className="small dim" style={{ marginTop: 8 }}>{t('A set left at 0 rest uses the exercise’s rest.')}</div>
-    </div>}
-    {c.intensifier?.type === 'restpause' && <div className="small dim" style={{ marginTop: -10, marginBottom: 18 }}>
-      {t('Rest-pause always trains as one warm-up set at this rep count, then one rest-pause work set. "Sets" isn’t used here.')}
-    </div>}
-    {/* Planned warm-ups: the session used to start at the work weight and you added every
+      )}
+      {c.intensifier?.type === "restpause" && (
+        <div className="small dim" style={{ marginTop: -10, marginBottom: 18 }}>
+          {t(
+            'Rest-pause always trains as one warm-up set at this rep count, then one rest-pause work set. "Sets" isn’t used here.',
+          )}
+        </div>
+      )}
+      {/* Planned warm-ups: the session used to start at the work weight and you added every
         warm-up by hand, every time. Rest-pause is excluded because it builds its own warm-up
         row, and cardio because an interval plan has no load to ramp. */}
-    {!cardio && c.intensifier?.type !== 'restpause' && <>
-      <div className="row cfgrow" style={{ marginBottom: 6 }}>
-        <Stepper label={t('Warm-up sets')} value={c.warmupSets || 0} step={1} decimal={false}
-          onChange={v => setC(x => ({ ...x, warmupSets: Math.max(0, Math.min(MAX_PLANNED_WARMUPS, Math.round(v) || 0)) }))} />
-      </div>
-      <div className="small dim" style={{ marginBottom: 18 }}>
-        {(c.warmupSets || 0) > 0
-          ? t('Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight, and you can still change any of them mid-session.')
-          : t('Ramp-up sets added before the work sets, so you do not have to add them by hand each session.')}
-      </div>
-    </>}
-    {mode === 'time' && !bw && <div className="small dim" style={{ marginBottom: 18 }}>
-      {t('A timer runs while you hold the set. Leave the weight at 0 for bodyweight holds.')}
-    </div>}
-    {/* Per-exercise rest (issue #10). Its own full-width row, like the other steppers with an
+      {!cardio && c.intensifier?.type !== "restpause" && (
+        <>
+          <div className="row cfgrow" style={{ marginBottom: 6 }}>
+            <Stepper
+              label={t("Warm-up sets")}
+              value={c.warmupSets || 0}
+              step={1}
+              decimal={false}
+              onChange={(v) =>
+                setC((x) => ({
+                  ...x,
+                  warmupSets: Math.max(
+                    0,
+                    Math.min(MAX_PLANNED_WARMUPS, Math.round(v) || 0),
+                  ),
+                }))
+              }
+            />
+          </div>
+          <div className="small dim" style={{ marginBottom: 18 }}>
+            {(c.warmupSets || 0) > 0
+              ? t(
+                  "Added before your work sets and left out of volume, records and progression. Each one closes half the gap to the work weight, and you can still change any of them mid-session.",
+                )
+              : t(
+                  "Ramp-up sets added before the work sets, so you do not have to add them by hand each session.",
+                )}
+          </div>
+        </>
+      )}
+      {mode === "time" && !bw && (
+        <div className="small dim" style={{ marginBottom: 18 }}>
+          {t(
+            "A timer runs while you hold the set. Leave the weight at 0 for bodyweight holds.",
+          )}
+        </div>
+      )}
+      {/* Per-exercise rest (issue #10). Its own full-width row, like the other steppers with an
         explanation under them, and outside every mode branch because a heavy triple, a plank
         and a cardio interval all rest — they just do not all want the same break. */}
-    {/* On the same wheel as the default rest timer (v1.3.11): 0:00 is "no rest of its own", so
+      {/* On the same wheel as the default rest timer (v1.3.11): 0:00 is "no rest of its own", so
         the default applies, and the row says which default that is. */}
-    <div className="sect-b cfg-rest" style={{ marginBottom: 6 }}>
-      <Row icon="timer" iconTint="var(--orange)" title={t('Rest for this exercise')} accessory="chevron"
-        value={c.restSec > 0 ? fmtRest(c.restSec) : t('Default ({0})', fmtRest(st.restSec))}
-        onClick={() => durationSheet({
-          title: t('Rest for this exercise'), value: c.restSec > 0 ? c.restSec : 0, max: REST_MAX,
-          off: t('Default ({0})', fmtRest(st.restSec)),
-          footer: t('Rest after each set of this exercise. 0:00 means your default rest.'),
-          onDone: v => setC(x => ({ ...x, restSec: v })),
-        })} />
-    </div>
-    <div className="small dim" style={{ marginBottom: 18 }}>
-      {t('Rest after each set of this exercise. 0:00 means your default rest.')}
-    </div>
-    {/* ---------- bodyweight + per side (issues #31/#32/#33) ---------- */}
-    {!cardio && <div className="sect-b" style={{ marginBottom: 8 }}>
-      <Row icon="figureStrength" iconTint="var(--acc)" title={t('Bodyweight')}
-        subtitle={bw ? (mode === 'time' ? t('No weight to enter. Just time the hold.') : t('No weight to enter. Just log the reps.')) : t('Ask for a weight on every set.')}>
-        <Switch checked={bw} onChange={v => setC(x => ({ ...x, bodyweight: v, weight: v ? 0 : x.weight }))} />
-      </Row>
-      {mode !== 'cardio' && <Row icon="sides" iconTint="var(--blue)" title={t('Per side')}
-        subtitle={mode === 'time'
-          ? (perSide
-            ? tn('{0} set becomes {1}: one on each side, {2}s held every time.', '{0} sets become {1}: one on each side, {2}s held every time.', c.sets || 0, (c.sets || 0) * 2, c.sec || 0)
-            : t('For side planks, single-arm holds and the like. Trains each side on its own.'))
-          : (perSide ? t('You still log the total: {0} is {1} per side.', c.reps || 0, fmtNum(sideReps(c.reps))) : t('For lunges, single-arm rows and the like.'))}>
-        {/* Reps: turning it on rounds the target up to an even number, since half of an odd total
-            is a rep one side does not get. Time: nothing to round — a hold's whole duration
-            happens twice, so only the flag changes (buildWorkSets doubles the planned sets). */}
-        <Switch checked={perSide} onChange={v => setC(x => {
-          if (mode === 'time') return { ...x, side: v || undefined }
-          const next = { ...x, side: v || undefined, reps: v ? Math.ceil((x.reps || 0) / 2) * 2 : x.reps }
-          return policyFor({ ...next, id: ex.id }, routine, 'reps') === 'double'
-            ? { ...next, ...normalizeRepRange(next.reps, next.repsMin, v ? 2 : 1) }
-            : next
-        })} />
-      </Row>}
-      {/* Off keeps the list as `pyramidDraft`, so a stray tap does not lose it before Save
-          (save writes neither field unless the toggle is on). */}
-      {mode === 'reps' && <Row icon="steps" iconTint="var(--acc)" title={t('Pyramid sets')}
-        subtitle={t('A different rep target for each set, e.g. 12 · 8 · 6 · Max · 12.')}>
-        <Switch checked={pyramid} onChange={v => setC(x => (v
-          ? { ...x, pyramid: x.pyramidDraft || pyramidFromFlat(x), intensifier: undefined }
-          : { ...x, ...flatFromPyramid(x.pyramid), pyramidDraft: x.pyramid, pyramid: undefined }))} />
-      </Row>}
-    </div>}
-    {/* A stepper is too wide to sit in a list row next to a label — it squeezes the text to
-        one word per line — so added weight gets the same full-width treatment as sets and
-        reps, with its explanation underneath. */}
-    {bw && <>
-      <div className="row cfgrow" style={{ marginBottom: 8 }}>
-        <Stepper label={t('Added ({0})', st.unit)} value={c.weight || 0} step={2.5}
-          onChange={v => setC(x => ({ ...x, weight: v }))} />
+      <div className="sect-b cfg-rest" style={{ marginBottom: 6 }}>
+        <Row
+          icon="timer"
+          iconTint="var(--orange)"
+          title={t("Rest for this exercise")}
+          accessory="chevron"
+          value={
+            c.restSec > 0
+              ? fmtRest(c.restSec)
+              : t("Default ({0})", fmtRest(st.restSec))
+          }
+          onClick={() =>
+            durationSheet({
+              title: t("Rest for this exercise"),
+              value: c.restSec > 0 ? c.restSec : 0,
+              max: REST_MAX,
+              off: t("Default ({0})", fmtRest(st.restSec)),
+              footer: t(
+                "Rest after each set of this exercise. 0:00 means your default rest.",
+              ),
+              onDone: (v) => setC((x) => ({ ...x, restSec: v })),
+            })
+          }
+        />
       </div>
       <div className="small dim" style={{ marginBottom: 18 }}>
-        {t('For dips or pull-ups with a belt. Progression then follows the weight.')}
+        {t(
+          "Rest after each set of this exercise. 0:00 means your default rest.",
+        )}
       </div>
-    </>}
-    {/* The rep ceiling only means something when there is no load to add instead. */}
-    {mode === 'reps' && bw && !(c.weight > 0) && <div className="row cfgrow" style={{ marginBottom: 18 }}>
-      <Stepper label={t('Top of the range')} value={c.repsMax || 0} step={1} decimal={false}
-        onChange={v => setC(x => ({ ...x, repsMax: v }))} />
-    </div>}
-    {mode === 'reps' && bw && !(c.weight > 0) && <div className="small dim" style={{ marginTop: -10, marginBottom: 18 }}>
-      {c.repsMax > 0
-        ? t('Reps climb to {0}, then a set is added and the reps start over. At {1} sets it asks you to add weight instead.', c.repsMax, MAX_BW_SETS)
-        : t('Reps climb by one whenever every set was clean. Set a ceiling to add sets instead of reps forever.')}
-    </div>}
-    {/* A pyramid already shapes every set; a drop-set or rest-pause would reshape them again. */}
-    {mode === 'reps' && !pyramid && <>
-      <h4 className="sec">{t('Drop-set / rest-pause')}</h4>
-      <div className="sect-b" style={{ marginBottom: 8 }}>
-        <SelectRow title={t('Intensifier')} sheetTitle={t('Intensifier')} value={c.intensifier?.type || ''}
-          onChange={v => setC(x => ({
-            ...x,
-            intensifier: !v ? undefined : v === 'dropset'
-              ? { type: 'dropset', count: x.intensifier?.count || 1, pct: x.intensifier?.pct || 20 }
-              // The activation set's own reps are whatever "Reps" above already says — a
-              // rest-pause plan only adds two new numbers: the total extra reps wanted past
-              // it, and the rest between the bursts that total gets split into.
-              : { type: 'restpause', totalReps: x.intensifier?.totalReps || x.reps || 8, restSec: x.intensifier?.restSec || st.restPauseSec || 15 },
-          }))}
-          options={[
-            { value: '', label: t('None') },
-            { value: 'dropset', label: t('Drop-set') },
-            { value: 'restpause', label: t('Rest-pause') },
-          ]} />
-      </div>
-      {c.intensifier?.type === 'dropset' && <div className="row cfgrow" style={{ marginBottom: 8 }}>
-        <Stepper label={t('Drops')} value={c.intensifier.count} step={1} min={1} decimal={false}
-          onChange={v => setC(x => ({ ...x, intensifier: { ...x.intensifier, count: v } }))} />
-        <Stepper label={t('Weight drop (%)')} value={c.intensifier.pct} step={5} min={5} decimal={false}
-          onChange={v => setC(x => ({ ...x, intensifier: { ...x.intensifier, pct: v } }))} />
-      </div>}
-      {c.intensifier?.type === 'restpause' && <div className="row cfgrow" style={{ marginBottom: 8 }}>
-        <Stepper label={t('Rest-pause reps')} value={c.intensifier.totalReps} step={1} min={1} decimal={false}
-          onChange={v => setC(x => ({ ...x, intensifier: { ...x.intensifier, totalReps: v } }))} />
-        <Stepper label={t('Rest (s)')} value={c.intensifier.restSec} step={5} min={5} decimal={false}
-          onChange={v => setC(x => ({ ...x, intensifier: { ...x.intensifier, restSec: v } }))} />
-      </div>}
-      {c.intensifier?.type && <div className="small dim" style={{ marginTop: -2, marginBottom: 18 }}>
-        {c.intensifier.type === 'dropset'
-          ? t('Every set becomes a drop-set: after the main set, {0} drop(s) with no rest, each about {1}% lighter.', c.intensifier.count, c.intensifier.pct)
-          : t('Every set becomes rest-pause: {0} reps to start, then {1} more split into short bursts, {2}s rest before each, roughly halving each time.', c.reps || 0, c.intensifier.totalReps, c.intensifier.restSec)}
-      </div>}
-    </>}
-    {/* How the weight is plate-loaded and what the bar weighs — per exercise, not per plan, so
+      {/* ---------- bodyweight + per side (issues #31/#32/#33) ---------- */}
+      {!cardio && (
+        <div className="sect-b" style={{ marginBottom: 8 }}>
+          <Row
+            icon="figureStrength"
+            iconTint="var(--acc)"
+            title={t("Bodyweight")}
+            subtitle={
+              bw
+                ? mode === "time"
+                  ? t("No weight to enter. Just time the hold.")
+                  : t("No weight to enter. Just log the reps.")
+                : t("Ask for a weight on every set.")
+            }
+          >
+            <Switch
+              checked={bw}
+              onChange={(v) =>
+                setC((x) => ({ ...x, bodyweight: v, weight: v ? 0 : x.weight }))
+              }
+            />
+          </Row>
+          {mode !== "cardio" && (
+            <Row
+              icon="sides"
+              iconTint="var(--blue)"
+              title={t("Per side")}
+              subtitle={
+                mode === "time"
+                  ? perSide
+                    ? tn(
+                        "{0} set becomes {1}: one on each side, {2}s held every time.",
+                        "{0} sets become {1}: one on each side, {2}s held every time.",
+                        c.sets || 0,
+                        (c.sets || 0) * 2,
+                        c.sec || 0,
+                      )
+                    : t(
+                        "For side planks, single-arm holds and the like. Trains each side on its own.",
+                      )
+                  : perSide
+                  ? t(
+                      "You still log the total: {0} is {1} per side.",
+                      c.reps || 0,
+                      fmtNum(sideReps(c.reps)),
+                    )
+                  : t("For lunges, single-arm rows and the like.")
+              }
+            >
+              {/* Reps: turning it on rounds the target up to an even number, since half of an odd total
+            is a rep one side does not get. Time: nothing to round — a hold's whole duration
+            happens twice, so only the flag changes (buildWorkSets doubles the planned sets). */}
+              <Switch
+                checked={perSide}
+                onChange={(v) =>
+                  setC((x) => {
+                    if (mode === "time") return { ...x, side: v || undefined };
+                    const next = {
+                      ...x,
+                      side: v || undefined,
+                      reps: v ? Math.ceil((x.reps || 0) / 2) * 2 : x.reps,
+                    };
+                    return policyFor(
+                      { ...next, id: ex.id },
+                      routine,
+                      "reps",
+                    ) === "double"
+                      ? {
+                          ...next,
+                          ...normalizeRepRange(
+                            next.reps,
+                            next.repsMin,
+                            v ? 2 : 1,
+                          ),
+                        }
+                      : next;
+                  })
+                }
+              />
+            </Row>
+          )}
+          {/* Off keeps the list as `pyramidDraft`, so a stray tap does not lose it before Save
+          (save writes neither field unless the toggle is on). */}
+          {mode === "reps" && (
+            <Row
+              icon="steps"
+              iconTint="var(--acc)"
+              title={t("Pyramid sets")}
+              subtitle={t(
+                "A different rep target for each set, e.g. 12 · 8 · 6 · Max · 12.",
+              )}
+            >
+              <Switch
+                checked={pyramid}
+                onChange={(v) =>
+                  setC((x) =>
+                    v
+                      ? {
+                          ...x,
+                          pyramid: x.pyramidDraft || pyramidFromFlat(x),
+                          intensifier: undefined,
+                        }
+                      : {
+                          ...x,
+                          ...flatFromPyramid(x.pyramid),
+                          pyramidDraft: x.pyramid,
+                          pyramid: undefined,
+                        },
+                  )
+                }
+              />
+            </Row>
+          )}
+        </div>
+      )}
+      {/* A stepper is too wide to sit in a list row next to a label — it squeezes the text to
+        one word per line — so added weight gets the same full-width treatment as sets and
+        reps, with its explanation underneath. */}
+      {bw && (
+        <>
+          <div className="row cfgrow" style={{ marginBottom: 8 }}>
+            <Stepper
+              label={t("Added ({0})", st.unit)}
+              value={c.weight || 0}
+              step={2.5}
+              onChange={(v) => setC((x) => ({ ...x, weight: v }))}
+            />
+          </div>
+          <div className="small dim" style={{ marginBottom: 18 }}>
+            {t(
+              "For dips or pull-ups with a belt. Progression then follows the weight.",
+            )}
+          </div>
+        </>
+      )}
+      {/* The rep ceiling only means something when there is no load to add instead. */}
+      {mode === "reps" && bw && !(c.weight > 0) && (
+        <div className="row cfgrow" style={{ marginBottom: 18 }}>
+          <Stepper
+            label={t("Top of the range")}
+            value={c.repsMax || 0}
+            step={1}
+            decimal={false}
+            onChange={(v) => setC((x) => ({ ...x, repsMax: v }))}
+          />
+        </div>
+      )}
+      {mode === "reps" && bw && !(c.weight > 0) && (
+        <div className="small dim" style={{ marginTop: -10, marginBottom: 18 }}>
+          {c.repsMax > 0
+            ? t(
+                "Reps climb to {0}, then a set is added and the reps start over. At {1} sets it asks you to add weight instead.",
+                c.repsMax,
+                MAX_BW_SETS,
+              )
+            : t(
+                "Reps climb by one whenever every set was clean. Set a ceiling to add sets instead of reps forever.",
+              )}
+        </div>
+      )}
+      {/* A pyramid already shapes every set; a drop-set or rest-pause would reshape them again. */}
+      {mode === "reps" && !pyramid && (
+        <>
+          <h4 className="sec">{t("Drop-set / rest-pause")}</h4>
+          <div className="sect-b" style={{ marginBottom: 8 }}>
+            <SelectRow
+              title={t("Intensifier")}
+              sheetTitle={t("Intensifier")}
+              value={c.intensifier?.type || ""}
+              onChange={(v) =>
+                setC((x) => ({
+                  ...x,
+                  intensifier: !v
+                    ? undefined
+                    : v === "dropset"
+                    ? {
+                        type: "dropset",
+                        count: x.intensifier?.count || 1,
+                        pct: x.intensifier?.pct || 20,
+                      }
+                    : // The activation set's own reps are whatever "Reps" above already says — a
+                      // rest-pause plan only adds two new numbers: the total extra reps wanted past
+                      // it, and the rest between the bursts that total gets split into.
+                      {
+                        type: "restpause",
+                        totalReps: x.intensifier?.totalReps || x.reps || 8,
+                        restSec:
+                          x.intensifier?.restSec || st.restPauseSec || 15,
+                      },
+                }))
+              }
+              options={[
+                { value: "", label: t("None") },
+                { value: "dropset", label: t("Drop-set") },
+                { value: "restpause", label: t("Rest-pause") },
+              ]}
+            />
+          </div>
+          {c.intensifier?.type === "dropset" && (
+            <div className="row cfgrow" style={{ marginBottom: 8 }}>
+              <Stepper
+                label={t("Drops")}
+                value={c.intensifier.count}
+                step={1}
+                min={1}
+                decimal={false}
+                onChange={(v) =>
+                  setC((x) => ({
+                    ...x,
+                    intensifier: { ...x.intensifier, count: v },
+                  }))
+                }
+              />
+              <Stepper
+                label={t("Weight drop (%)")}
+                value={c.intensifier.pct}
+                step={5}
+                min={5}
+                decimal={false}
+                onChange={(v) =>
+                  setC((x) => ({
+                    ...x,
+                    intensifier: { ...x.intensifier, pct: v },
+                  }))
+                }
+              />
+            </div>
+          )}
+          {c.intensifier?.type === "restpause" && (
+            <div className="row cfgrow" style={{ marginBottom: 8 }}>
+              <Stepper
+                label={t("Rest-pause reps")}
+                value={c.intensifier.totalReps}
+                step={1}
+                min={1}
+                decimal={false}
+                onChange={(v) =>
+                  setC((x) => ({
+                    ...x,
+                    intensifier: { ...x.intensifier, totalReps: v },
+                  }))
+                }
+              />
+              <Stepper
+                label={t("Rest (s)")}
+                value={c.intensifier.restSec}
+                step={5}
+                min={5}
+                decimal={false}
+                onChange={(v) =>
+                  setC((x) => ({
+                    ...x,
+                    intensifier: { ...x.intensifier, restSec: v },
+                  }))
+                }
+              />
+            </div>
+          )}
+          {c.intensifier?.type && (
+            <div
+              className="small dim"
+              style={{ marginTop: -2, marginBottom: 18 }}
+            >
+              {c.intensifier.type === "dropset"
+                ? t(
+                    "Every set becomes a drop-set: after the main set, {0} drop(s) with no rest, each about {1}% lighter.",
+                    c.intensifier.count,
+                    c.intensifier.pct,
+                  )
+                : t(
+                    "Every set becomes rest-pause: {0} reps to start, then {1} more split into short bursts, {2}s rest before each, roughly halving each time.",
+                    c.reps || 0,
+                    c.intensifier.totalReps,
+                    c.intensifier.restSec,
+                  )}
+            </div>
+          )}
+        </>
+      )}
+      {/* How the weight is plate-loaded and what the bar weighs — per exercise, not per plan, so
         it sits apart from the config fields above and writes straight to S.barWeights/S.loadKind. */}
-    {mode === 'reps' && <>
-      <h4 className="sec">{t('Plate loading')}</h4>
-      <BarWeightEditor ex={ex} cfg={c} extra={t('Applies to this exercise everywhere, not just this plan.')} />
-    </>}
-    {pyramid
-      ? <div className="small dim" style={{ marginBottom: 18 }}>{t('Weight is up to you: pyramid sets are not progressed automatically.')}</div>
-      : <ProgressionFields ex={ex} mode={mode} c={c} setC={setC} routine={routine} unit={st.unit} perSide={perSide} />}
-    <textarea className="input" rows={3} maxLength={500} style={{ marginBottom: 18 }}
-      placeholder={t('Note (optional): loading cues, "bar only, then +1 plate/side each set", anything worth remembering')}
-      value={c.note || ''} onChange={e => setC(x => ({ ...x, note: e.target.value }))} />
-    {/* What saving does, when it is neither of the two usual things: the routine editor's
+      {mode === "reps" && (
+        <>
+          <h4 className="sec">{t("Plate loading")}</h4>
+          <BarWeightEditor
+            ex={ex}
+            cfg={c}
+            extra={t(
+              "Applies to this exercise everywhere, not just this plan.",
+            )}
+          />
+        </>
+      )}
+      {pyramid ? (
+        <div className="small dim" style={{ marginBottom: 18 }}>
+          {t(
+            "Weight is up to you: pyramid sets are not progressed automatically.",
+          )}
+        </div>
+      ) : (
+        <ProgressionFields
+          ex={ex}
+          mode={mode}
+          c={c}
+          setC={setC}
+          routine={routine}
+          unit={st.unit}
+          perSide={perSide}
+        />
+      )}
+      <textarea
+        className="input"
+        rows={3}
+        maxLength={500}
+        style={{ marginBottom: 18 }}
+        placeholder={t(
+          'Note (optional): loading cues, "bar only, then +1 plate/side each set", anything worth remembering',
+        )}
+        value={c.note || ""}
+        onChange={(e) => setC((x) => ({ ...x, note: e.target.value }))}
+      />
+      {/* What saving does, when it is neither of the two usual things: the routine editor's
         Replace (#110) seeds this sheet with the slot it replaces, and saving puts the exercise
         into that slot. */}
-    <Button variant="primary" disabled={progressionStepInvalid} onClick={save}>{saveLabel || (existing ? t('Save') : t('Add to routine'))}</Button>
-    {isCustomEx(ex) && <><div style={{ height: 8 }} /><Button icon="pencil" onClick={() => { close(); customExSheet(ex) }}>{t('Edit or delete this exercise')}</Button></>}
-    {/* The routine editor's counterpart to a workout's Swap (#110): another exercise in this
+      <Button
+        variant="primary"
+        disabled={progressionStepInvalid}
+        onClick={save}
+      >
+        {saveLabel || (existing ? t("Save") : t("Add to routine"))}
+      </Button>
+      {isCustomEx(ex) && (
+        <>
+          <div style={{ height: 8 }} />
+          <Button
+            icon="pencil"
+            onClick={() => {
+              close();
+              customExSheet(ex);
+            }}
+          >
+            {t("Edit or delete this exercise")}
+          </Button>
+        </>
+      )}
+      {/* The routine editor's counterpart to a workout's Swap (#110): another exercise in this
         slot, with the slot's sets, reps, weight, rule and note kept (lib/routines.js). What was
         changed on this sheet and not saved is left behind, as closing it would. */}
-    {onReplace && <><div style={{ height: 8 }} /><Button icon="swap" onClick={() => { close(); onReplace() }}>{t('Replace exercise')}</Button></>}
-    {onDelete && <><div style={{ height: 8 }} /><Button variant="danger" onClick={() => { close(); onDelete() }}>{t('Remove from routine')}</Button></>}
-  </>
+      {onReplace && (
+        <>
+          <div style={{ height: 8 }} />
+          <Button
+            icon="swap"
+            onClick={() => {
+              close();
+              onReplace();
+            }}
+          >
+            {t("Replace exercise")}
+          </Button>
+        </>
+      )}
+      {onDelete && (
+        <>
+          <div style={{ height: 8 }} />
+          <Button
+            variant="danger"
+            onClick={() => {
+              close();
+              onDelete();
+            }}
+          >
+            {t("Remove from routine")}
+          </Button>
+        </>
+      )}
+    </>
+  );
 }
+
 export const exConfigSheet = (ex, existing, onSave, onDelete, routine, initial, onReplace, saveLabel) => ui().openSheet(close => <ExConfig ex={ex} existing={existing} initial={initial} onSave={onSave} onDelete={onDelete} onReplace={onReplace} routine={routine} saveLabel={saveLabel} close={close} />)
 
 /* ============================ glyph picker ============================ */
