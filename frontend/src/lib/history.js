@@ -551,9 +551,22 @@ function buildWorkSets(S, cfg, options = {}) {
     // A deload uses the routine's target weight; a routine that never set one (weight 0) falls
     // back to the last regular load rather than prescribing an empty bar.
     const lastRegular = last ? (last.sets[i] || last.sets[last.sets.length - 1]) : null
-    const w = useTarget
-      ? (cfg.weight > 0 ? cfg.weight : (lastRegular && lastRegular.r > 0 ? lastRegular.w : cfg.weight))
-      : usable ? usable.w : (conf && conf.w > 0 ? conf.w : cfg.weight)
+    const pyramid = isPyramid(cfg)
+
+    const pyramidWeight =
+      pyramid && Array.isArray(cfg.pyramidWeights)
+        ? Number(cfg.pyramidWeights[i]) || 0
+        : null
+
+    const w = pyramid
+      ? pyramidWeight ?? cfg.weight ?? 0
+      : useTarget
+        ? (cfg.weight > 0
+            ? cfg.weight
+            : (lastRegular && lastRegular.r > 0 ? lastRegular.w : cfg.weight))
+        : usable
+          ? usable.w
+              : (conf && conf.w > 0 ? conf.w : cfg.weight)
     const row = { w, r: planReps || !usable ? cfg.reps : usable.r, done: false }
     // Pyramid sets: the plan owns each set's own target; a max set opens at what you managed
     // in that same set last time, so the number to beat is already there.

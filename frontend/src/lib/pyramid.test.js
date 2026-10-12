@@ -126,18 +126,20 @@ describe('buildSets with pyramid sets (Q9, Q13)', () => {
         }],
       }],
     }
-    expect(buildSets(S, pyramidCfg())).toEqual([
+    expect(
+      buildSets(S, pyramidCfg({ pyramidWeights: [60, 70, 80, 85, 50] })),
+    ).toEqual([
       // the plan owns the numeric targets: 10 logged last time, 12 asked for again
       { w: 60, r: 12, done: false },
       { w: 70, r: 8, done: false },
       { w: 80, r: 6, done: false },
       { w: 85, r: 9, done: false, max: true },
       { w: 50, r: 12, done: false },
-    ])
+    ]);
   })
   it('planned warm-ups still go in front of the pyramid (Q10)', () => {
     const S = { exWeights: {}, workouts: [] }
-    const rows = buildSets(S, pyramidCfg({ weight: 0, warmupSets: 1 }), { step: 2.5 })
+    const rows = buildSets(S, pyramidCfg({ weight: 0, warmupSets: 1 }), {step: 2.5,});
     expect(rows).toHaveLength(6)
     expect(rows[0].phase).toBe('warmup')
     expect(rows.slice(1).map(r => r.r)).toEqual([12, 8, 6, 0, 12])
@@ -165,7 +167,7 @@ describe('a planned session builds the pyramid with useTarget (progression off)'
         { w: 85, r: 9, done: true, max: true }, { w: 50, r: 12, done: true },
       ] }] }],
     }
-    const rows = buildSets(S, pyramidCfg(), { useTarget: true, planReps: true })
+    const rows = buildSets(S,pyramidCfg({ pyramidWeights: [60, 70, 80, 85, 50] }),{ useTarget: true, planReps: true });
     expect(rows.map(r => r.w)).toEqual([60, 70, 80, 85, 50])
     expect(rows.map(r => r.r)).toEqual([12, 8, 6, 9, 12])
     expect(rows[3].max).toBe(true)
@@ -235,3 +237,38 @@ describe('Max set records (Q20, Q21)', () => {
     ])
   })
 })
+
+describe("per-set pyramid weights", () => {
+  const history = {
+    exWeights: {},
+    workouts: [
+      {
+        id: "w1",
+        d: "2026-09-28",
+        entries: [
+          {
+            id: LIFT,
+            sets: [
+              { w: 60, r: 12, done: true },
+              { w: 70, r: 8, done: true },
+              { w: 80, r: 6, done: true },
+              { w: 85, r: 9, done: true, max: true },
+              { w: 50, r: 12, done: true },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  it("the plan’s weights win over what was logged last time", () => {
+    const rows = buildSets(
+      history,
+      pyramidCfg({ pyramidWeights: [40, 50, 60, 65, 30] }),
+    );
+    expect(rows.map((r) => r.w)).toEqual([40, 50, 60, 65, 30]);
+  });
+  it("without pyramidWeights every set starts at cfg.weight", () => {
+    const rows = buildSets(history, pyramidCfg({ weight: 20 }));
+    expect(rows.map((r) => r.w)).toEqual([20, 20, 20, 20, 20]);
+  });
+});

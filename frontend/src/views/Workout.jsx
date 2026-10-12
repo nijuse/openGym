@@ -1074,19 +1074,37 @@ function ActiveWorkout() {
   const mutEntry = (idx, fn) => update(s => { fn(s.active.entries[idx]) }, true)
   // Clearing an optional field drops the key rather than storing null, so a set only carries
   // what was actually logged — in the session, in history and in a backup.
-  const setField = (idx, i, field, v) => mutEntry(idx, e => {
-    if (v == null) delete e.sets[i][field]; else e.sets[i][field] = v
-    // Typing a duration IS the new plan, the same way ticking the row ends it: a plan a displaced
-    // hold put aside must not outrank what you just typed, or the field would read 45 and the ▶
-    // would still hold the 30 the row was asking for before.
-    if (field === 'sec') delete e.sets[i].planSec
-    // Changing a weight cascades to following inherited sets of the same phase, so a correction
-    // carries through without retyping every row while explicit manual exceptions stay put.
-    if (field === 'w') {
-      e.sets[i].weightOrigin = WEIGHT_ORIGIN_MANUAL
-      e.sets = cascadeWeight(e.sets, i, v)
-    }
-  })
+  const setField = (idx, i, field, v) =>
+    mutEntry(idx, (e) => {
+      const row = e.sets[i];
+      if (v == null) delete row[field];
+      else row[field] = v;
+      if (field === "sec") {
+        delete row.planSec;
+      }
+
+      if (field === "w") {
+        row.weightOrigin = WEIGHT_ORIGIN_MANUAL;
+        const cfg = {
+          ...(e.target || {}),
+          id: e.id,
+        };
+          console.log("WEIGHT EDIT", {
+            cfg,
+            pyramid: isPyramid(cfg),
+            sets: e.sets,
+            index: i,
+            value: v,
+          });
+
+          e.sets[i].weightOrigin = WEIGHT_ORIGIN_MANUAL;
+        // Pyramid sets are completely independent.
+        // Do NOT cascade weight changes between pyramid sets.
+        if (isPyramid(cfg)) return;
+        // Normal exercises keep the existing inherited-weight behaviour.
+        e.sets = cascadeWeight(e.sets, i, v);
+      }
+    });
   const modeAt = idx => modeOf({ ...(A.entries[idx].target || {}), id: A.entries[idx].id })
   const addSet = idx => mutEntry(idx, e => {
     const l = e.sets[e.sets.length - 1]
